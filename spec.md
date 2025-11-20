@@ -3,16 +3,16 @@
 ## Scenario: assemble highlight reel from a directory
 * Given a directory "<src>" containing source videos
 * And an output directory "<out>"
-* When I pass --src-dir "<src>"
-* And I pass --autoedit-dir "<out>"
-* And I pass --target "<seconds>"
-* And I pass --min "<min>"
-* And I pass --max "<max>"
-* And I pass --svt-preset "<preset>"
-* And I pass --svt-crf "<crf>"
-* And I pass --svt-lp "<lp>"
-* And I pass --opus-br "<bitrate>"
-* And I pass --fontfile "<font>"
+* When I set environment variable "QCUT_SRC_DIR" to "<src>"
+* And I set environment variable "QCUT_OUT_DIR" to "<out>"
+* And I set environment variable "QCUT_TARGET_SECONDS" to "<seconds>"
+* And I set environment variable "QCUT_MIN_SECONDS" to "<min>"
+* And I set environment variable "QCUT_MAX_SECONDS" to "<max>"
+* And I set environment variable "QCUT_SVT_PRESET" to "<preset>"
+* And I set environment variable "QCUT_SVT_CRF" to "<crf>"
+* And I set environment variable "QCUT_SVT_LP" to "<lp>"
+* And I set environment variable "QCUT_OPUS_BR" to "<bitrate>"
+* And I set environment variable "QCUT_FONT_FILE" to "<font>"
 * And I run qcut
 * Then qcut encodes Matroska clips into "<out>"
 * And qcut appends the clips with mkvmerge
@@ -24,8 +24,8 @@
 * And an output directory "<out>"
 * And a manifest in "<out>" whose "final" status is "done"
 * And the manifest references a finished video in "<out>"
-* When I pass --src-dir "<src>"
-* And I pass --autoedit-dir "<out>"
+* When I set environment variable "QCUT_SRC_DIR" to "<src>"
+* And I set environment variable "QCUT_OUT_DIR" to "<out>"
 * And I run qcut
 * Then qcut prints the existing output file name
 * And qcut exits without re-encoding clips
@@ -34,8 +34,8 @@
 * Given a directory "<src>" containing source videos
 * And an output directory "<out>"
 * And a manifest in "<out>" with partial probe results
-* When I pass --src-dir "<src>"
-* And I pass --autoedit-dir "<out>"
+* When I set environment variable "QCUT_SRC_DIR" to "<src>"
+* And I set environment variable "QCUT_OUT_DIR" to "<out>"
 * And I run qcut
 * Then qcut reuses probe durations from the manifest
 * And qcut continues encoding remaining clips
@@ -44,10 +44,10 @@
 ## Scenario: enable verbose debug logging
 * Given a directory "<src>" containing source videos
 * And an output directory "<out>"
-* When I pass --src-dir "<src>"
-* And I pass --autoedit-dir "<out>"
-* And I pass --debug-cmds
-* And I pass --verbose
+* When I set environment variable "QCUT_SRC_DIR" to "<src>"
+* And I set environment variable "QCUT_OUT_DIR" to "<out>"
+* And I set environment variable "QCUT_DEBUG_CMDS" to "1"
+* And I set environment variable "QCUT_VERBOSE" to "1"
 * And I run qcut
 * Then qcut prints ffmpeg and ffprobe commands
 * And qcut prints mkvmerge commands

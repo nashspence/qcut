@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import argparse
 import json
 import math
 import os
@@ -112,6 +111,47 @@ def walk_video_files(root: str) -> List[str]:
             if f.endswith(VIDEO_EXTS):
                 files.append(os.path.join(dp, f))
     return sorted(files)
+
+
+def env_value(names: list[str], default: Optional[str] = None) -> Optional[str]:
+    for name in names:
+        val = os.getenv(name)
+        if val is not None:
+            return val
+    return default
+
+
+def env_int(names: list[str], default: int) -> int:
+    raw = env_value(names, None)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        eprint(f"[autoedit] ERROR: {names[0]} must be an integer (got: {raw})")
+        sys.exit(1)
+
+
+def env_bool(names: list[str], default: bool = False) -> bool:
+    raw = env_value(names, None)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def env_str(names: list[str], default: str) -> str:
+    raw = env_value(names, None)
+    if raw is None:
+        return default
+    return raw
+
+
+def env_optional_str(names: list[str]) -> Optional[str]:
+    raw = env_value(names, None)
+    if raw is None:
+        return None
+    raw = raw.strip()
+    return raw or None
 
 
 # ------------------------- epoch-from-filename (Perl port) -------------------------
@@ -327,80 +367,37 @@ def sources_sig_same(m: Dict[str, Any], src_dir: str) -> bool:
 
 # ------------------------- main -------------------------
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="Auto-edit from a source directory of videos with timestamp overlays and resumable manifest."
-    )
-    ap.add_argument(
-        "--src-dir",
-        default="/in",
-        help="Directory containing source video files (default: /in).",
-    )
-    # Match zsh semantics: TARGET/MIN/MAX are in SECONDS.
-    ap.add_argument(
-        "--target",
-        type=int,
-        default=int(os.getenv("TARGET", "600")),  # 10 minutes
-        help="Target SECONDS total (default 600 = 10 minutes).",
-    )
-    ap.add_argument(
-        "--min",
-        type=int,
-        default=int(os.getenv("MIN", "6")),
-        help="Minimum clip length in SECONDS (default 6).",
-    )
-    ap.add_argument(
-        "--max",
-        type=int,
-        default=int(os.getenv("MAX", "9")),
-        help="Maximum clip length in SECONDS (default 9).",
-    )
-    ap.add_argument("--svt-preset", type=int, default=int(os.getenv("SVT_PRESET", "4")))
-    ap.add_argument("--svt-crf", type=int, default=int(os.getenv("SVT_CRF", "38")))
-    ap.add_argument(
-        "--svt-lp",
-        type=int,
-        default=int(os.getenv("SVT_LP", "5")),
-        help="Number of SVT-AV1 lookahead processes (lp parameter).",
-    )
-    ap.add_argument("--opus-br", default=os.getenv("OPUS_BR", "128k"))
-    # IMPORTANT: tp has no default; if omitted -> no limiter
-    ap.add_argument(
-        "--tp",
-        type=str,
-        default=None,
-        help="True-peak ceiling in dBFS (e.g., -1.5). If omitted, no per-clip limiter is applied.",
-    )
-    ap.add_argument("--fontfile", default=os.getenv("FONTFILE", DEFAULT_FONT))
-    ap.add_argument("--autoedit-dir", default=os.getenv("AUTOEDIT_DIR", "/out"))
-    ap.add_argument(
-        "--debug-cmds",
-        action="store_true",
-        help="Print full ffmpeg/ffprobe commands before running.",
-    )
-    ap.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Enable detailed logging for debugging.",
-    )
-    args = ap.parse_args()
+    src_dir = env_str(["QCUT_SRC_DIR", "SRC_DIR"], "/in")
+    autoedit_dir = env_str(["QCUT_OUT_DIR", "AUTOEDIT_DIR"], "/out")
+    target_sec = env_int(["QCUT_TARGET_SECONDS", "TARGET"], 600)
+    min_sec = env_int(["QCUT_MIN_SECONDS", "MIN"], 6)
+    max_sec = env_int(["QCUT_MAX_SECONDS", "MAX"], 9)
+    svt_preset = env_int(["QCUT_SVT_PRESET", "SVT_PRESET"], 4)
+    svt_crf = env_int(["QCUT_SVT_CRF", "SVT_CRF"], 38)
+    svt_lp = env_int(["QCUT_SVT_LP", "SVT_LP"], 5)
+    opus_br = env_str(["QCUT_OPUS_BR", "OPUS_BR"], "128k")
+    tp = env_optional_str(["QCUT_TRUE_PEAK_DB", "TP"])
+    fontfile = env_str(["QCUT_FONT_FILE", "FONTFILE"], DEFAULT_FONT)
+    debug_cmds = env_bool(["QCUT_DEBUG_CMDS", "DEBUG_CMDS"], False)
+    verbose = env_bool(["QCUT_VERBOSE", "VERBOSE"], False)
 
     global VERBOSE
-    VERBOSE = args.verbose or args.debug_cmds
+    VERBOSE = verbose or debug_cmds
 
     for exe in ("ffmpeg", "ffprobe", "mkvmerge"):
         need(exe)
 
-    if not os.path.isdir(args.src_dir):
+    if not os.path.isdir(src_dir):
         eprint(
-            f"[autoedit] ERROR: --src-dir must be an existing directory (got: {args.src_dir})"
+            "[autoedit] ERROR: QCUT_SRC_DIR must point to an existing directory "
+            f"(got: {src_dir})"
         )
         sys.exit(1)
 
-    os.makedirs(args.autoedit_dir, exist_ok=True)
-    work_dir = os.path.join(args.autoedit_dir, ".autoedit_work")
+    os.makedirs(autoedit_dir, exist_ok=True)
+    work_dir = os.path.join(autoedit_dir, ".autoedit_work")
     os.makedirs(work_dir, exist_ok=True)
-    m = load_manifest(args.autoedit_dir)
+    m = load_manifest(autoedit_dir)
 
     # ------------------------- Early exit if already completed -------------------------
     if m and m.get("final", {}).get("status") == "done":
@@ -418,10 +415,10 @@ def main() -> None:
             )
 
     # Reset manifest if source set changed or missing (never delete; only overwrite atomically)
-    if not m or not sources_sig_same(m, args.src_dir):
-        files_stats = current_sources_sig(args.src_dir)
-        m = new_manifest(args.src_dir, files_stats, args.autoedit_dir)
-        save_manifest(args.autoedit_dir, m)
+    if not m or not sources_sig_same(m, src_dir):
+        files_stats = current_sources_sig(src_dir)
+        m = new_manifest(src_dir, files_stats, autoedit_dir)
+        save_manifest(autoedit_dir, m)
         log("New manifest created.")
 
     log("Start")
@@ -429,7 +426,7 @@ def main() -> None:
         f"Source dir: {m['sources']['src_dir']}  "
         f"({m['sources']['count']} video files, {m['sources']['total_size']:,} bytes)"
     )
-    log(f"Output:    {args.autoedit_dir}")
+    log(f"Output:    {autoedit_dir}")
     log(f"Clips dir: {work_dir}  (kept for resume)")
 
     # 1) Gather files & durations (videos only)
@@ -448,10 +445,10 @@ def main() -> None:
     # Build or load the plan
     if not m.get("plan"):
         # Cap TARGET to available total (seconds)
-        target_sec = args.target if combined >= args.target else int(combined)
+        target_sec = target_sec if combined >= target_sec else int(combined)
 
         # Build slot lengths in SECONDS (zsh-compatible)
-        len_slots_sec = build_len_slots(target_sec, args.min, args.max)
+        len_slots_sec = build_len_slots(target_sec, min_sec, max_sec)
         if not len_slots_sec:
             # If target < min, make a single short slot exactly equal to target
             len_slots_sec = [target_sec]
@@ -464,20 +461,20 @@ def main() -> None:
             )
 
         # Quotas with zsh-equivalent rounding + correction (MIN is in seconds)
-        q = quotas_like_zsh(durations, slot_count, args.min)
+        q = quotas_like_zsh(durations, slot_count, min_sec)
 
         base_epochs = [base_epoch_for_file(p) for p in files]
 
         plan = {
             "target_sec": target_sec,
-            "min_sec": args.min,
-            "max_sec": args.max,
-            "svt_preset": args.svt_preset,
-            "svt_crf": args.svt_crf,
-            "svt_lp": args.svt_lp,
-            "opus_br": args.opus_br,
-            "tp": args.tp,  # None -> no limiter
-            "fontfile": args.fontfile,
+            "min_sec": min_sec,
+            "max_sec": max_sec,
+            "svt_preset": svt_preset,
+            "svt_crf": svt_crf,
+            "svt_lp": svt_lp,
+            "opus_br": opus_br,
+            "tp": tp,  # None -> no limiter
+            "fontfile": fontfile,
             "len_slots_sec": len_slots_sec,
             "files": [
                 {
@@ -499,7 +496,7 @@ def main() -> None:
             d = fi["duration"]
             part = d / qi if qi > 0 else 0.0
             for slot in range(1, qi + 1):
-                Ls = len_slots_sec[idx - 1] if (idx - 1) < slot_count else args.min
+                Ls = len_slots_sec[idx - 1] if (idx - 1) < slot_count else min_sec
                 L = float(Ls)  # seconds
                 ps = (slot - 1) * part
                 mo = max(0.0, part - L)
@@ -523,7 +520,7 @@ def main() -> None:
                 idx += 1
         m["plan"] = plan
         m["clips"] = clips
-        save_manifest(args.autoedit_dir, m)
+        save_manifest(autoedit_dir, m)
 
         # Plan visibility logs
         log(
@@ -543,8 +540,8 @@ def main() -> None:
         log(f"Plan loaded: {len(m['clips'])} clips")
 
     if m.get("plan") and "svt_lp" not in m["plan"]:
-        m["plan"]["svt_lp"] = args.svt_lp
-        save_manifest(args.autoedit_dir, m)
+        m["plan"]["svt_lp"] = svt_lp
+        save_manifest(autoedit_dir, m)
 
     # 2) Encode pending clips
     done = sum(
@@ -645,7 +642,7 @@ def main() -> None:
         log(
             f"clip {int(k):03d} START ← {os.path.basename(src)} @ {start:.2f}s for {L:.0f}s → {os.path.basename(out_clip)}"
         )
-        if args.debug_cmds:
+        if debug_cmds:
             log("CMD: " + " ".join(shlex.quote(x) for x in cmd))
         t0 = time.time()
 
@@ -661,17 +658,17 @@ def main() -> None:
 
         if r.returncode != 0:
             eprint(f"[autoedit] ERROR: encoding clip {k}")
-            save_manifest(args.autoedit_dir, m)
+            save_manifest(autoedit_dir, m)
             sys.exit(1)
 
         if ffprobe_duration(out_clip) <= 0:
             eprint(f"[autoedit] ERROR: invalid clip {k} output")
-            save_manifest(args.autoedit_dir, m)
+            save_manifest(autoedit_dir, m)
             sys.exit(1)
 
         clip["status"] = "done"
         m["clips"][k] = clip
-        save_manifest(args.autoedit_dir, m)
+        save_manifest(autoedit_dir, m)
 
     # 3) Final concat (only if not already done or file missing)
     files_span = m["plan"]["files"]
@@ -683,9 +680,9 @@ def main() -> None:
     span_name = (
         f"{start_dt.strftime('%Y%m%dT%H%M%S')}--" f"{end_dt.strftime('%Y%m%dT%H%M%S')}"
     )
-    out_path = os.path.join(args.autoedit_dir, f"{span_name} auto-edit.mkv")
+    out_path = os.path.join(autoedit_dir, f"{span_name} auto-edit.mkv")
     m["final"]["out_path"] = out_path
-    save_manifest(args.autoedit_dir, m)
+    save_manifest(autoedit_dir, m)
 
     all_done = all(
         c["status"] == "done" and os.path.exists(c["out"]) for c in m["clips"].values()
@@ -712,7 +709,7 @@ def main() -> None:
     cmd_final.insert(1, "--no-track-tags")
 
     log(f"mkvmerge append: {len(clip_paths)} clips → {out_path}")
-    if args.debug_cmds:
+    if debug_cmds:
         log("CMD: " + " ".join(shlex.quote(x) for x in cmd_final))
 
     t0 = time.time()
@@ -720,12 +717,12 @@ def main() -> None:
     log(f"mkvmerge rc={r.returncode} in {time.time()-t0:.1f}s → {out_path}")
     if r.returncode != 0:
         eprint("[autoedit] ERROR: mkvmerge append failed")
-        save_manifest(args.autoedit_dir, m)
+        save_manifest(autoedit_dir, m)
         sys.exit(1)
 
     m["final"]["status"] = "done"
     m["final"]["finished_at"] = now_utc_iso()
-    save_manifest(args.autoedit_dir, m)
+    save_manifest(autoedit_dir, m)
     print(os.path.basename(out_path))
 
 
