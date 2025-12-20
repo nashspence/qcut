@@ -354,7 +354,7 @@ def main() -> None:
         default=int(os.getenv("MAX", "9")),
         help="Maximum clip length in SECONDS (default 9).",
     )
-    ap.add_argument("--svt-preset", type=int, default=int(os.getenv("SVT_PRESET", "4")))
+    ap.add_argument("--svt-preset", type=int, default=int(os.getenv("SVT_PRESET", "5")))
     ap.add_argument("--svt-crf", type=int, default=int(os.getenv("SVT_CRF", "38")))
     ap.add_argument(
         "--svt-lp",
