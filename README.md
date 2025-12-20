@@ -2,18 +2,6 @@
 
 qcut is a containerised utility for assembling highlight reels from directories of source videos. The script mirrors the original shell workflow: probe durations, plan clip lengths, encode each segment with SVT-AV1, and append them into a final Matroska file with timestamp overlays.
 
-The tool is configured exclusively through environment variables (no CLI flags). The most common variables are:
-
-- `QCUT_SRC_DIR` (default `/in`)
-- `QCUT_OUT_DIR` (default `/out`)
-- `QCUT_TARGET_SECONDS` (default `600`)
-- `QCUT_MIN_SECONDS` / `QCUT_MAX_SECONDS` (defaults `6` / `9`)
-- `QCUT_SVT_PRESET`, `QCUT_SVT_CRF`, `QCUT_SVT_LP` (defaults `4`, `38`, `5`)
-- `QCUT_OPUS_BR` (default `128k`)
-- `QCUT_TRUE_PEAK_DB` (optional limiter ceiling)
-- `QCUT_FONT_FILE` (default container font)
-- `QCUT_DEBUG_CMDS` and `QCUT_VERBOSE` (set to `1` to enable)
-
 ## Repository layout
 
 - `Containerfile` – build definition for the runtime image.
@@ -46,10 +34,7 @@ podman build -t qcut .
 podman run --rm \
   -v "$PWD/in:/in:ro" \
   -v "$PWD/out:/out" \
-  -e QCUT_SRC_DIR=/in \
-  -e QCUT_OUT_DIR=/out \
-  -e QCUT_SVT_LP=6 \
-  qcut
+  qcut --src-dir /in --autoedit-dir /out --svt-lp 6
 ```
 
 ## Release
